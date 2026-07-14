@@ -1,0 +1,82 @@
+{
+  "server": {
+    "host": "nerdzone.gg",
+    "port": 25565,
+    "version": "1.21.11"
+  },
+  "password": "sua_senha",
+  "accounts": [
+    {
+      "username": "SuaConta01",
+      "status": "error",
+      "registered": false,
+      "logged_in": false,
+      "kit_collected": false,
+      "fishing_started": false
+    },
+    {
+      "username": "SuaConta02",
+      "status": "fishing",
+      "registered": false,
+      "logged_in": false,
+      "kit_collected": false,
+      "fishing_started": false
+    },
+    {
+      "username": "SuaConta03",
+      "status": "fishing",
+      "registered": false,
+      "logged_in": false,
+      "kit_collected": false,
+      "fishing_started": false
+    },
+    {
+      "username": "SuaConta04",
+      "status": "fishing",
+      "registered": false,
+      "logged_in": false,
+      "kit_collected": false,
+      "fishing_started": false
+    },
+    {
+      "username": "SuaConta05",
+      "status": "fishing",
+      "registered": false,
+      "logged_in": false,
+      "kit_collected": false,
+      "fishing_started": false
+    },
+    {
+      "username": "SuaConta06",
+      "status": "fishing",
+      "registered": false,
+      "logged_in": false,
+      "kit_collected": false,
+      "fishing_started": false
+    },
+    {
+      "username": "SuaConta07",
+      "status": "fishing",
+      "registered": false,
+      "logged_in": false,
+      "kit_collected": false,
+      "fishing_started": false
+    },
+    {
+      "username": "SuaConta08",
+      "status": "fishing",
+      "registered": false,
+      "logged_in": false,
+      "kit_collected": false,
+      "fishing_started": false
+    },
+    {
+      "username": "SuaConta09",
+      "status": "fishing",
+      "registered": false,
+      "logged_in": false,
+      "kit_collected": false,
+      "fishing_started": false
+    }
+  ]
+}
