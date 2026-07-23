@@ -2,19 +2,25 @@
 // das outras contas), vai para /home porco e fica batendo no porco que reaparece lá.
 const { loadAccounts, sleep, connectBot, describeReason, waitForMessage } = require('./common');
 const { loginAndSwitchServer } = require('./flow');
-const { equipDiamondSword, findNearestPig, attackPigUntilDead } = require('./pig');
+const { equipDiamondSword, findNearestPig, attackPigUntilDead, computeHitLocation, sameHitLocation } = require('./pig');
 
-const USERNAME = 'chucro_';
-const PASSWORD = 'valeso11';
+const USERNAME = 'JuraPesca01';
+const PASSWORD = '357159';
 const MAX_ATTEMPTS = 3; // transient disconnects/proxy hiccups get a couple of automatic retries
 const AFTER_KILL_DELAY_MS = 5000;
 const INITIAL_CHECK_DELAY_MS = 3000;
-const PIG_CHECK_MIN_MS = 15000;
-const PIG_CHECK_MAX_MS = 24000;
+const PIG_CHECK_MIN_MS = 13000;
+const PIG_CHECK_MAX_MS = 20000;
 const RUBIS_WAIT_MS = 5000;
+const MISMATCH_QUIT_MIN_MS = 3 * 60 * 1000;
+const MISMATCH_QUIT_MAX_MS = 5 * 60 * 1000;
 
 function randomPigCheckDelay() {
   return PIG_CHECK_MIN_MS + Math.random() * (PIG_CHECK_MAX_MS - PIG_CHECK_MIN_MS);
+}
+
+function randomMismatchQuitDelay() {
+  return MISMATCH_QUIT_MIN_MS + Math.random() * (MISMATCH_QUIT_MAX_MS - MISMATCH_QUIT_MIN_MS);
 }
 
 async function attemptLogin(config, password) {
@@ -36,13 +42,23 @@ async function ensureSwordEquipped(bot) {
   }
 }
 
-// Verifica se há um porco por perto; se achar, bate nele até morrer, manda /rubis
-// e mostra a resposta. Retorna true se matou um porco, false se não achou nenhum.
-async function checkAndKillPig(bot) {
+// Verifica se há um porco por perto. Se a localização (posição/distância/ângulo) bater
+// com a referência salva no primeiro encontro, bate nele até morrer, manda /rubis e mostra
+// a resposta. Se divergir da referência, sinaliza mismatch sem atacar. Retorna
+// { killed, mismatch, location } — location é a localização do porco encontrado nesta
+// verificação (null se nenhum porco foi achado).
+async function checkAndKillPig(bot, referenceLocation) {
   await ensureSwordEquipped(bot);
 
   const pig = findNearestPig(bot);
-  if (!pig) return false;
+  if (!pig) return { killed: false, mismatch: false, location: null };
+
+  const location = computeHitLocation(bot, pig);
+
+  if (referenceLocation && !sameHitLocation(referenceLocation, location)) {
+    console.log(`  [alerta] localização do porco (posição/distância/ângulo) diferente da referência`);
+    return { killed: false, mismatch: true, location };
+  }
 
   console.log(`  [porco] encontrado, atacando...`);
   await attackPigUntilDead(bot, pig);
@@ -53,26 +69,61 @@ async function checkAndKillPig(bot) {
   const response = await waitForMessage(bot, () => true, RUBIS_WAIT_MS);
   console.log(`  [rubis] ${response !== null ? response : '(sem resposta)'}`);
 
-  return true;
+  return { killed: true, mismatch: false, location };
+}
+
+// Porco apareceu em posição/distância/ângulo diferente da referência salva no primeiro
+// encontro (possível armadilha/troca de local). Espera um tempo aleatório entre 3 e 5min
+// antes de fechar a conta, para não desconectar imediatamente após a divergência.
+async function handleLocationMismatch(bot) {
+  const delay = randomMismatchQuitDelay();
+  console.log(`  [alerta] aguardando ${Math.round(delay / 1000)}s antes de fechar a conta`);
+  await sleep(delay);
+  console.log(`  [encerrando] fechando a conta e finalizando o programa`);
+  bot.quit();
+  process.exit(0);
 }
 
 // Espera 3s (settle do teleporte), faz a primeira verificação de porco (sem encerrar
-// o programa se não achar nada) e daí em diante alterna espera aleatória (40-70s) + verificação.
-// Se uma verificação pós-espera não achar porco, encerra o programa.
+// o programa se não achar nada) e salva a localização do porco como referência. Daí em
+// diante alterna espera aleatória (40-70s) + verificação, comparando sempre com a
+// referência. Se uma verificação pós-espera não achar porco, encerra o programa; se achar
+// um porco em localização divergente, encerra via handleLocationMismatch.
 async function huntPigsForever(bot) {
   console.log(`  [aguardando] primeira verificação de porco em ${INITIAL_CHECK_DELAY_MS / 1000}s`);
   await sleep(INITIAL_CHECK_DELAY_MS);
-  await checkAndKillPig(bot);
+
+  let referenceLocation = null;
+  const first = await checkAndKillPig(bot, referenceLocation);
+  if (first.mismatch) {
+    await handleLocationMismatch(bot);
+    return;
+  }
+  if (first.killed) {
+    referenceLocation = first.location;
+    console.log(`  [ref] localização de referência do porco salva`);
+  }
 
   for (;;) {
     const delay = randomPigCheckDelay();
     console.log(`  [aguardando] próxima verificação de porco em ${Math.round(delay / 1000)}s`);
     await sleep(delay);
 
-    const killed = await checkAndKillPig(bot);
-    if (!killed) {
+    const result = await checkAndKillPig(bot, referenceLocation);
+
+    if (result.mismatch) {
+      await handleLocationMismatch(bot);
+      return;
+    }
+
+    if (!result.killed) {
       console.log(`  [FIM] nenhum porco encontrado após a espera, encerrando o programa`);
       process.exit(0);
+    }
+
+    if (!referenceLocation) {
+      referenceLocation = result.location;
+      console.log(`  [ref] localização de referência do porco salva`);
     }
   }
 }

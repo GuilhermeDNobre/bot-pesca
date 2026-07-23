@@ -33,16 +33,6 @@ async function attackPigUntilDead(bot, pig) {
       const current = bot.entities[targetId];
       if (!current) break;
 
-      // force:true faz a mira "colar" no porco instantaneamente. Sem isso, o mineflayer
-      // rampeia o yaw/pitch em pequenos passos por tick (limitado a yawSpeed) até a mira
-      // reportada alcançar o alvo, e só então a promise resolve - um giro grande pode levar
-      // quase 1s. Se a água empurrar o bot durante essa rampa, a posição muda mas a mira já
-      // calculada no início não é recalculada, e o hit sai no vento.
-      await bot.lookAt(current.position.offset(0, current.height / 2, 0), true);
-      // Com force:true o pacote de look só é enviado no próximo tick de física (updatePosition
-      // roda a cada 50ms via setInterval), não na hora do await. Sem esperar esse tick, o
-      // pacote de ataque pode sair primeiro e o servidor avalia o hit com a mira antiga.
-      await bot.waitForTicks(1);
       bot.attack(current);
       await sleep(650);
     }
@@ -52,4 +42,64 @@ async function attackPigUntilDead(bot, pig) {
   }
 }
 
-module.exports = { equipDiamondSword, findNearestPig, attackPigUntilDead };
+// Distância angular mínima entre dois ângulos em radianos, considerando o wraparound de ±π.
+function angleDiff(a, b) {
+  let diff = Math.abs(a - b) % (2 * Math.PI);
+  if (diff > Math.PI) diff = 2 * Math.PI - diff;
+  return diff;
+}
+
+// Calcula posição do porco, a distância/ângulos que o bot precisaria mirar para
+// atacá-lo (sem de fato rotacionar a câmera) e a rotação atual do bot (view
+// yaw/pitch, ou seja: para onde o "player" está de fato olhando). Serve para
+// comparação com a localização de referência salva no primeiro encontro.
+function computeHitLocation(bot, pig) {
+  const from = bot.entity.position.offset(0, bot.entity.height, 0);
+  const to = pig.position.offset(0, pig.height / 2, 0);
+  const delta = to.minus(from);
+  const distance = delta.norm();
+  const yaw = Math.atan2(-delta.x, -delta.z);
+  const pitch = Math.atan2(delta.y, Math.sqrt(delta.x * delta.x + delta.z * delta.z));
+  return {
+    position: pig.position.clone(),
+    distance,
+    yaw,
+    pitch,
+    viewYaw: bot.entity.yaw,
+    viewPitch: bot.entity.pitch
+  };
+}
+
+const POSITION_TOLERANCE = 0.5; // blocos
+const DISTANCE_TOLERANCE = 0.5; // blocos
+const ANGLE_TOLERANCE = 0.05; // radianos (~3°)
+
+// Considera "a mesma" situação só se posição, distância, ângulos de mira e a
+// rotação atual do bot (view yaw/pitch) baterem com a referência dentro da
+// tolerância. A rotação muda mesmo sem o bot se mover (ex: alguém/algo girando
+// a câmera do player), por isso é comparada separadamente da mira geométrica.
+function sameHitLocation(reference, current) {
+  if (!reference || !current) return false;
+  const posDiff = reference.position.distanceTo(current.position);
+  const distDiff = Math.abs(reference.distance - current.distance);
+  const yawDiff = angleDiff(reference.yaw, current.yaw);
+  const pitchDiff = angleDiff(reference.pitch, current.pitch);
+  const viewYawDiff = angleDiff(reference.viewYaw, current.viewYaw);
+  const viewPitchDiff = angleDiff(reference.viewPitch, current.viewPitch);
+  return (
+    posDiff <= POSITION_TOLERANCE &&
+    distDiff <= DISTANCE_TOLERANCE &&
+    yawDiff <= ANGLE_TOLERANCE &&
+    pitchDiff <= ANGLE_TOLERANCE &&
+    viewYawDiff <= ANGLE_TOLERANCE &&
+    viewPitchDiff <= ANGLE_TOLERANCE
+  );
+}
+
+module.exports = {
+  equipDiamondSword,
+  findNearestPig,
+  attackPigUntilDead,
+  computeHitLocation,
+  sameHitLocation
+};
