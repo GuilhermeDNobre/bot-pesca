@@ -2,10 +2,10 @@ const { sleep, waitForEvent, waitForMessage, findItemByName, describeReason } = 
 
 const SERVER_SELECT_SLOT = 13; // "position 14" counted 1-indexed by a human = slot 13 (0-indexed)
 
-// Logs a bot into the network and makes sure it has a Fishing Rod (via the RankUp
-// server-select + /kit iniciante flow). Does NOT quit the bot - caller owns the connection.
+// Logs a bot into the network and switches it to the RankUp server via the compass
+// server-select menu. Does NOT quit the bot - caller owns the connection.
 // Resolves { success, reason, maintenance, disconnected }.
-async function loginAndEnsureKit(bot, password) {
+async function loginAndSwitchServer(bot, password) {
   // Track any disconnect that happens mid-flow so failures report the real cause
   // (e.g. an anti-cheat kick) instead of the downstream symptom.
   let endReason;
@@ -38,7 +38,9 @@ async function loginAndEnsureKit(bot, password) {
   console.log(`  [ok] logado`);
 
   await waitForEvent(bot, 'spawn', 8000);
-  await sleep(1500);
+  // Longer settle time before the activateItem/clickWindow burst - sending it too soon
+  // after login has been triggering BadPacketException kicks from the proxy.
+  await sleep(4000);
   if (gotEndReason) return fail();
 
   // The Fishing Rod only exists on the RankUp server, never in the hub - so there's no
@@ -69,6 +71,25 @@ async function loginAndEnsureKit(bot, password) {
   if (gotEndReason) return fail();
 
   await sleep(2000);
+  bot.removeListener('end', onEnd);
+  return { success: true, reason: 'switched to server' };
+}
+
+// Makes sure a bot already on the RankUp server has a Fishing Rod (via /kit iniciante).
+// Does NOT quit the bot - caller owns the connection.
+// Resolves { success, reason, disconnected }.
+async function ensureKit(bot) {
+  let endReason;
+  let gotEndReason = false;
+  const onEnd = (reason) => { endReason = reason; gotEndReason = true; };
+  bot.once('end', onEnd);
+  const fail = (reason) => {
+    bot.removeListener('end', onEnd);
+    if (gotEndReason) {
+      return { success: false, reason: `desconectado: ${describeReason(endReason)}`, disconnected: true };
+    }
+    return { success: false, reason };
+  };
 
   let rod = findItemByName(bot, 'fishing_rod');
   if (!rod && !gotEndReason) {
@@ -90,6 +111,15 @@ async function loginAndEnsureKit(bot, password) {
   console.log(`  [ok] Fishing Rod recebida`);
   bot.removeListener('end', onEnd);
   return { success: true, reason: 'kit collected' };
+}
+
+// Logs a bot into the network and makes sure it has a Fishing Rod (via the RankUp
+// server-select + /kit iniciante flow). Does NOT quit the bot - caller owns the connection.
+// Resolves { success, reason, maintenance, disconnected }.
+async function loginAndEnsureKit(bot, password) {
+  const switchResult = await loginAndSwitchServer(bot, password);
+  if (!switchResult.success) return switchResult;
+  return ensureKit(bot);
 }
 
 // Parses "Você possui X Peixes." from a /peixes response. Handles both plain integers
@@ -152,4 +182,4 @@ async function startAfkFishing(bot) {
   return { success: false, reason: 'fish count never increased after 3 attempts' };
 }
 
-module.exports = { loginAndEnsureKit, startAfkFishing, parsePeixesCount, getPeixesCount };
+module.exports = { loginAndSwitchServer, ensureKit, loginAndEnsureKit, startAfkFishing, parsePeixesCount, getPeixesCount };

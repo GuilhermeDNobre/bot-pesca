@@ -7,7 +7,8 @@
     "register": "node register-all.js",
     "login": "node login-and-kit-v2.js",
     "farm": "node farm-all.js",
-    "diagnose": "node diagnose.js"
+    "diagnose": "node diagnose.js",
+    "plot": "node plot-jurapesca01.js"
   },
   "keywords": [
     "minecraft",

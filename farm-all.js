@@ -3,11 +3,24 @@
 const { loadAccounts, saveAccounts, sleep, connectBot, describeReason } = require('./common');
 const { loginAndEnsureKit, startAfkFishing, getPeixesCount } = require('./flow');
 
-// Each login flow (spawn wait, /logar, server-select window, /kit) takes 60s+ and sends several
-// bursts of packets (activateItem/clickWindow). At 8s stagger, 4-5 accounts end up mid-flow at
-// once, and the proxy starts dropping/kicking with BadPacketException under that concurrent load.
-const STAGGER_MS = 20000; // space out connections so fewer bots are mid-login at the same time
+// Real farm logs show BadPacketException kicks cluster around the login/server-switch
+// handshake specifically (never once an account is settled and fishing), and accounts that
+// started later - once earlier accounts were past their handshake - logged in clean. So the
+// proxy chokes on multiple bots doing that handshake at once, not on total connected bots.
+// A time-based stagger alone doesn't guarantee that, since a failed attempt reconnects and
+// re-enters the handshake immediately, overlapping with whoever starts next. withLoginLock()
+// below serializes the handshake itself so only one account is ever mid-handshake at a time.
+const STAGGER_MS = 3000; // just paces the console output / initial TCP connects, not a safety net anymore
 const MAX_LOGIN_ATTEMPTS = 3; // transient proxy kicks (BadPacketException) get a couple of retries
+
+// Runs `fn` after every previously-queued login finishes (success or failure), so only one
+// account is ever inside the fragile handshake at a time.
+let loginQueue = Promise.resolve();
+function withLoginLock(fn) {
+  const run = loginQueue.then(fn, fn);
+  loginQueue = run.then(() => {}, () => {});
+  return run;
+}
 
 // Connects (or reconnects) until loginAndEnsureKit succeeds or attempts run out.
 // Returns { bot, result } - bot is null if every attempt failed.
@@ -26,8 +39,8 @@ async function connectWithRetry(account, config, password) {
     console.log(`  [${account.username}] [FAIL] login/kit tentativa ${attempt}/${MAX_LOGIN_ATTEMPTS}: ${result.reason}`);
     if (result.maintenance) return { bot: null, result };
     if (attempt < MAX_LOGIN_ATTEMPTS) {
-      console.log(`  [${account.username}] [retry] provável falha transitória, reconectando em 5s`);
-      await sleep(5000);
+      console.log(`  [${account.username}] [retry] provável falha transitória, reconectando em 8s`);
+      await sleep(8000);
     }
   }
   return { bot: null, result };
@@ -36,7 +49,7 @@ async function connectWithRetry(account, config, password) {
 async function runAccount(account, config, password) {
   console.log(`\n${'='.repeat(60)}\n${account.username}: iniciando\n${'='.repeat(60)}`);
 
-  const { bot, result: loginResult } = await connectWithRetry(account, config, password);
+  const { bot, result: loginResult } = await withLoginLock(() => connectWithRetry(account, config, password));
   if (!bot) {
     account.status = loginResult.maintenance ? 'blocked_maintenance' : 'error';
     console.log(`  [${account.username}] [FAIL FINAL] login/kit: ${loginResult.reason}`);

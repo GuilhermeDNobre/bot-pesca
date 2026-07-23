@@ -35,8 +35,8 @@ async function main() {
 
       console.log(`  [FAIL] ${account.username} (tentativa ${attempt}/${MAX_ATTEMPTS}): ${result.reason}`);
       if (attempt < MAX_ATTEMPTS) {
-        console.log(`  [retry] provável falha transitória, tentando de novo em 5s`);
-        await sleep(5000);
+        console.log(`  [retry] provável falha transitória, tentando de novo em 8s`);
+        await sleep(8000);
       }
     }
 
