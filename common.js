@@ -74,14 +74,15 @@ function waitForMessage(bot, predicate, timeoutMs) {
   });
 }
 
-async function connectBot(username, config) {
+async function connectBot(username, config, extraOptions = {}) {
   const resolvedHost = await resolveDNS(config.host);
   return mineflayer.createBot({
     host: resolvedHost,
     port: config.port,
     username,
     version: config.version,
-    enforceBelowMinVersion: true
+    enforceBelowMinVersion: true,
+    ...extraOptions
   });
 }
 

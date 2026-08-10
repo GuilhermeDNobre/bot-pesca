@@ -128,7 +128,7 @@ const RETRY_DELAY_MS = 8000;
 // diagnóstico. Não decide quit/retry — quem chama decide o que fazer com o
 // bot retornado, mesmo em caso de falha (pode ter sido kickado no meio).
 async function attemptRun(account, config, password) {
-  const bot = await connectBot(account.username, config);
+  const bot = await connectBot(account.username, config, { hideErrors: true });
   bot.on('error', (err) => log(`[error] ${err.message}`));
   bot.on('kicked', (reason) => log(`[kicked] ${describeReason(reason)}`));
   bot.on('end', (reason) => log(`[end] ${describeReason(reason)}`));
