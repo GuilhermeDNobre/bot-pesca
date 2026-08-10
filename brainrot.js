@@ -121,15 +121,13 @@ async function joinBrainrot(bot) {
   return { success: true };
 }
 
-async function main() {
-  const data = loadAccounts();
-  const { server: config, password } = data;
-  const account = data.accounts[0];
+const MAX_ATTEMPTS = 3; // kicks/desconexões do proxy (ex: BadPacketException) são transitórios, tentar de novo
+const RETRY_DELAY_MS = 8000;
 
-  log('='.repeat(60));
-  log(account.username);
-  log('='.repeat(60));
-
+// Conecta, loga, entra no RankUp, entra no BrainRot e roda os checkpoints de
+// diagnóstico. Não decide quit/retry — quem chama decide o que fazer com o
+// bot retornado, mesmo em caso de falha (pode ter sido kickado no meio).
+async function attemptRun(account, config, password) {
   const bot = await connectBot(account.username, config);
   bot.on('error', (err) => log(`[error] ${err.message}`));
   bot.on('kicked', (reason) => log(`[kicked] ${describeReason(reason)}`));
@@ -148,17 +146,14 @@ async function main() {
   const loginResult = await loginAndSwitchServer(bot, password);
   log(`[STEP] loginAndSwitchServer result: ${JSON.stringify(loginResult)}`);
   if (!loginResult.success) {
-    bot.quit();
-    process.exit(1);
+    return { bot, success: false, reason: loginResult.reason };
   }
 
   log(`[STATE] bot.game após troca para RankUp: ${JSON.stringify(bot.game)}`);
 
   const joinResult = await joinBrainrot(bot);
   if (!joinResult.success) {
-    log(`[FAIL] ${joinResult.reason}`);
-    bot.quit();
-    process.exit(1);
+    return { bot, success: false, reason: joinResult.reason };
   }
 
   logPlayers(bot, 'logo após fechar a janela');
@@ -174,8 +169,38 @@ async function main() {
   logPlayers(bot, 'logo antes de desligar');
   logOccupiedBases(bot, 'logo antes de desligar');
 
+  return { bot, success: true };
+}
+
+async function main() {
+  const data = loadAccounts();
+  const { server: config, password } = data;
+  const account = data.accounts[0];
+
+  log('='.repeat(60));
+  log(account.username);
+  log('='.repeat(60));
+
+  let result;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    result = await attemptRun(account, config, password);
+    if (result.success) break;
+
+    log(`[FAIL] tentativa ${attempt}/${MAX_ATTEMPTS}: ${result.reason}`);
+    result.bot.quit();
+    if (attempt < MAX_ATTEMPTS) {
+      log(`[retry] provável kick/desconexão transitória, tentando de novo em ${RETRY_DELAY_MS}ms`);
+      await sleep(RETRY_DELAY_MS);
+    }
+  }
+
+  if (!result.success) {
+    log(`[FAIL FINAL] ${result.reason}`);
+    process.exit(1);
+  }
+
   log('[ENCERRANDO] desligando o bot');
-  bot.quit();
+  result.bot.quit();
   process.exit(0);
 }
 
