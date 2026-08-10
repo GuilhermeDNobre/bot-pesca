@@ -2,6 +2,7 @@
 // accounts.json, entra no RankUp, digita /brainrot, clica no slot do ender
 // pearl e faz dump máximo de estado (mensagens, janelas, inventário, tab
 // list) no console para depurar o fluxo real do minigame.
+const { Vec3 } = require('vec3');
 const { loadAccounts, sleep, connectBot, describeReason, waitForEvent } = require('./common');
 const { loginAndSwitchServer } = require('./flow');
 
@@ -9,6 +10,26 @@ const { loginAndSwitchServer } = require('./flow');
 // via contagem por linha (9 slots por linha, contando 1-9 em cada linha):
 // linha 2, 5ª posição = 9 + (5-1) = 13.
 const BRAINROT_JOIN_SLOT = 13;
+
+// bot.players é a tab list da rede inteira (proxy), não da instância atual —
+// confirmado num teste real (mais de mil nomes de outros minigames/mundos).
+// Sem scoreboard/actionbar e sem mensagem de entrada no chat, o sinal
+// confiável é visual: cada uma das 8 bases só aparece fisicamente (vira um
+// bloco de Chiseled Sandstone no primeiro bloco acima do chão) quando um
+// jogador ocupa aquele slot. Coordenadas fornecidas pelo usuário a partir de
+// uma instância real do BrainRot; Y=61 é o primeiro bloco acima do chão
+// (chão está em Y=60).
+const BASE_SLOT_COORDS = [
+  { x: 24, y: 61, z: 38 },
+  { x: 24, y: 61, z: 10 },
+  { x: 24, y: 61, z: -17 },
+  { x: 24, y: 61, z: -45 },
+  { x: -24, y: 61, z: 38 },
+  { x: -24, y: 61, z: 10 },
+  { x: -24, y: 61, z: -17 },
+  { x: -24, y: 61, z: -45 }
+];
+const OCCUPIED_BASE_BLOCK = 'chiseled_sandstone';
 
 const WINDOW_OPEN_TIMEOUT_MS = 6000;
 const WINDOW_CLOSE_TIMEOUT_MS = 5000;
@@ -49,6 +70,20 @@ function logPlayers(bot, label) {
   });
   const playerEntities = Object.values(bot.entities).filter((e) => e.type === 'player');
   log(`[ENTITIES - ${label}] player-type entities loaded: ${playerEntities.length}`);
+}
+
+// Escaneia as 8 posições de base conhecidas e reporta quantas estão
+// ocupadas (bloco de Chiseled Sandstone presente) vs vazias.
+function logOccupiedBases(bot, label) {
+  let occupiedCount = 0;
+  BASE_SLOT_COORDS.forEach((coord, idx) => {
+    const block = bot.blockAt(new Vec3(coord.x, coord.y, coord.z));
+    const occupied = !!block && block.name === OCCUPIED_BASE_BLOCK;
+    if (occupied) occupiedCount++;
+    log(`  base ${idx} (${coord.x},${coord.y},${coord.z}): ${block ? block.name : '(chunk não carregado)'} — ${occupied ? 'OCUPADA' : 'vazia'}`);
+  });
+  log(`[BASES - ${label}] ocupadas=${occupiedCount}/${BASE_SLOT_COORDS.length}`);
+  return occupiedCount;
 }
 
 // Envia /brainrot, espera a janela abrir, faz dump dela, clica no slot do
@@ -128,14 +163,17 @@ async function main() {
   }
 
   logPlayers(bot, 'logo após fechar a janela');
+  logOccupiedBases(bot, 'logo após fechar a janela');
 
   await sleep(AFTER_JOIN_SETTLE_MS);
   log(`[STEP] settle de ${AFTER_JOIN_SETTLE_MS}ms concluído`);
   logPlayers(bot, 'após settle adicional');
+  logOccupiedBases(bot, 'após settle adicional');
 
   log(`[STEP] aguardando ${BEFORE_QUIT_DELAY_MS}ms antes de desligar`);
   await sleep(BEFORE_QUIT_DELAY_MS);
   logPlayers(bot, 'logo antes de desligar');
+  logOccupiedBases(bot, 'logo antes de desligar');
 
   log('[ENCERRANDO] desligando o bot');
   bot.quit();

@@ -19,6 +19,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "mineflayer": "^4.37.1"
+    "mineflayer": "^4.37.1",
+    "vec3": "^0.1.10"
   }
 }
