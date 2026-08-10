@@ -90,9 +90,55 @@ function nearestBaseDistance(bot) {
   return min;
 }
 
+const CHUNK_LOAD_TIMEOUT_MS = 8000;
+
+// Corner (coords absolutas de bloco, y=0) do chunk column que contém uma
+// coordenada de base — é o formato que bot.world usa pra identificar chunks.
+function chunkCornerFor(coord) {
+  return new Vec3((coord.x >> 4) << 4, 0, (coord.z >> 4) << 4);
+}
+
+// bot.blockAt() só retorna null quando o chunk não carregou nada ainda; se
+// o chunk column carregou só parcialmente (comum logo após um teleporte pra
+// dentro da arena), ele pode devolver "air" mesmo onde há um bloco real —
+// falso vazio. Espera explicitamente o evento chunkColumnLoad pra cada uma
+// das 8 colunas de chunk das bases (não só um raio ao redor do bot, que é o
+// que bot.waitForChunksToLoad() embutido do mineflayer faz) antes de
+// escanear. Retorna true se todas carregaram a tempo, false se estourou o
+// timeout (algumas colunas continuam sem garantia de estarem carregadas).
+function waitForBaseChunksToLoad(bot, timeoutMs) {
+  const pending = new Set();
+  for (const coord of BASE_SLOT_COORDS) {
+    const corner = chunkCornerFor(coord);
+    if (!bot.world.getColumnAt(corner)) pending.add(corner.toString());
+  }
+  if (pending.size === 0) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (result) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      bot.world.removeListener('chunkColumnLoad', onLoad);
+      resolve(result);
+    };
+    const onLoad = (columnCorner) => {
+      pending.delete(columnCorner.toString());
+      if (pending.size === 0) finish(true);
+    };
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    bot.world.on('chunkColumnLoad', onLoad);
+  });
+}
+
 // Escaneia as 8 posições de base conhecidas e reporta quantas estão
-// ocupadas (bloco de Cut Sandstone presente) vs vazias.
-function logOccupiedBases(bot, label) {
+// ocupadas (bloco de Cut Sandstone presente) vs vazias. Espera os chunks
+// das 8 colunas carregarem antes de ler, pra evitar falso vazio.
+async function logOccupiedBases(bot, label) {
+  const chunksLoaded = await waitForBaseChunksToLoad(bot, CHUNK_LOAD_TIMEOUT_MS);
+  log(`[BASES - ${label}] chunks das 8 bases carregados: ${chunksLoaded ? 'sim' : 'NÃO (timeout, leitura abaixo pode estar incompleta)'}`);
+
   let occupiedCount = 0;
   BASE_SLOT_COORDS.forEach((coord, idx) => {
     const block = bot.blockAt(new Vec3(coord.x, coord.y, coord.z));
@@ -177,17 +223,17 @@ async function attemptRun(account, config, password) {
   }
 
   logPlayers(bot, 'logo após fechar a janela');
-  logOccupiedBases(bot, 'logo após fechar a janela');
+  await logOccupiedBases(bot, 'logo após fechar a janela');
 
   await sleep(AFTER_JOIN_SETTLE_MS);
   log(`[STEP] settle de ${AFTER_JOIN_SETTLE_MS}ms concluído`);
   logPlayers(bot, 'após settle adicional');
-  logOccupiedBases(bot, 'após settle adicional');
+  await logOccupiedBases(bot, 'após settle adicional');
 
   log(`[STEP] aguardando ${BEFORE_QUIT_DELAY_MS}ms antes de desligar`);
   await sleep(BEFORE_QUIT_DELAY_MS);
   logPlayers(bot, 'logo antes de desligar');
-  logOccupiedBases(bot, 'logo antes de desligar');
+  await logOccupiedBases(bot, 'logo antes de desligar');
 
   return { bot, success: true };
 }
