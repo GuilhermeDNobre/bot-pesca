@@ -15,10 +15,11 @@ const BRAINROT_JOIN_SLOT = 13;
 // confirmado num teste real (mais de mil nomes de outros minigames/mundos).
 // Sem scoreboard/actionbar e sem mensagem de entrada no chat, o sinal
 // confiável é visual: cada uma das 8 bases só aparece fisicamente (vira um
-// bloco de Chiseled Sandstone no primeiro bloco acima do chão) quando um
-// jogador ocupa aquele slot. Coordenadas fornecidas pelo usuário a partir de
-// uma instância real do BrainRot; Y=61 é o primeiro bloco acima do chão
-// (chão está em Y=60).
+// bloco de Cut Sandstone no primeiro bloco acima do chão) quando um jogador
+// ocupa aquele slot. Coordenadas fornecidas pelo usuário a partir de uma
+// instância real do BrainRot; Y=61 é o primeiro bloco acima do chão (chão
+// está em Y=60). Confirmado num teste real: slots vazios são air, slots
+// ocupados mostram cut_sandstone.
 const BASE_SLOT_COORDS = [
   { x: 24, y: 61, z: 38 },
   { x: 24, y: 61, z: 10 },
@@ -29,7 +30,7 @@ const BASE_SLOT_COORDS = [
   { x: -24, y: 61, z: -17 },
   { x: -24, y: 61, z: -45 }
 ];
-const OCCUPIED_BASE_BLOCK = 'chiseled_sandstone';
+const OCCUPIED_BASE_BLOCK = 'cut_sandstone';
 
 const WINDOW_OPEN_TIMEOUT_MS = 6000;
 const WINDOW_CLOSE_TIMEOUT_MS = 5000;
@@ -60,16 +61,14 @@ function dumpWindow(window) {
   });
 }
 
+// bot.players é a tab list da rede inteira via proxy (confirmado: 1000+
+// nomes), não serve pra identificar quem está na instância — por isso só
+// loga a contagem, sem o dump por nome. player-type entities em bot.entities
+// é o que reflete quem está fisicamente carregado por perto.
 function logPlayers(bot, label) {
-  const players = bot.players;
-  const names = Object.keys(players);
-  log(`[PLAYERS - ${label}] count=${names.length}`);
-  names.forEach((name) => {
-    const p = players[name];
-    log(`  ${name} uuid=${p.uuid} ping=${p.ping} gamemode=${p.gamemode} displayName=${JSON.stringify(p.displayName ? p.displayName.toString() : null)} entityId=${p.entity ? p.entity.id : 'none'}`);
-  });
+  const tabListCount = Object.keys(bot.players).length;
   const playerEntities = Object.values(bot.entities).filter((e) => e.type === 'player');
-  log(`[ENTITIES - ${label}] player-type entities loaded: ${playerEntities.length}`);
+  log(`[PLAYERS - ${label}] tab list (rede inteira, não confiável)=${tabListCount} | entities (por perto)=${playerEntities.length}`);
 }
 
 // Escaneia as 8 posições de base conhecidas e reporta quantas estão
