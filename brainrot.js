@@ -71,8 +71,27 @@ function logPlayers(bot, label) {
   log(`[PLAYERS - ${label}] tab list (rede inteira, não confiável)=${tabListCount} | entities (por perto)=${playerEntities.length}`);
 }
 
+// Distância (em blocos) do bot até a base conhecida mais próxima. Serve pra
+// diagnosticar se BASE_SLOT_COORDS está mesmo dentro da instância atual —
+// a própria conta que entrou deveria sempre estar perto de alguma base (a
+// dela mesma). Se der uma distância grande, a instância provavelmente está
+// num local diferente do overworld das coordenadas fixas.
+function nearestBaseDistance(bot) {
+  if (!bot.entity) return null;
+  const pos = bot.entity.position;
+  let min = Infinity;
+  for (const coord of BASE_SLOT_COORDS) {
+    const dx = pos.x - coord.x;
+    const dy = pos.y - coord.y;
+    const dz = pos.z - coord.z;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (dist < min) min = dist;
+  }
+  return min;
+}
+
 // Escaneia as 8 posições de base conhecidas e reporta quantas estão
-// ocupadas (bloco de Chiseled Sandstone presente) vs vazias.
+// ocupadas (bloco de Cut Sandstone presente) vs vazias.
 function logOccupiedBases(bot, label) {
   let occupiedCount = 0;
   BASE_SLOT_COORDS.forEach((coord, idx) => {
@@ -81,7 +100,8 @@ function logOccupiedBases(bot, label) {
     if (occupied) occupiedCount++;
     log(`  base ${idx} (${coord.x},${coord.y},${coord.z}): ${block ? block.name : '(chunk não carregado)'} — ${occupied ? 'OCUPADA' : 'vazia'}`);
   });
-  log(`[BASES - ${label}] ocupadas=${occupiedCount}/${BASE_SLOT_COORDS.length}`);
+  const dist = nearestBaseDistance(bot);
+  log(`[BASES - ${label}] ocupadas=${occupiedCount}/${BASE_SLOT_COORDS.length} | distância do bot até a base conhecida mais próxima=${dist !== null ? dist.toFixed(1) + 'm' : 'desconhecida'}`);
   return occupiedCount;
 }
 
