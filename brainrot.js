@@ -1,14 +1,14 @@
-// Smoke test para o minigame BrainHot: loga com a primeira conta de
-// accounts.json, entra no RankUp, digita /brainhot, clica no slot do ender
+// Smoke test para o minigame BrainRot: loga com a primeira conta de
+// accounts.json, entra no RankUp, digita /brainrot, clica no slot do ender
 // pearl e faz dump máximo de estado (mensagens, janelas, inventário, tab
 // list) no console para depurar o fluxo real do minigame.
 const { loadAccounts, sleep, connectBot, describeReason, waitForEvent } = require('./common');
 const { loginAndSwitchServer } = require('./flow');
 
-// Slot 0-indexed do item de ender pearl na janela do /brainhot. Confirmado
+// Slot 0-indexed do item de ender pearl na janela do /brainrot. Confirmado
 // via contagem por linha (9 slots por linha, contando 1-9 em cada linha):
 // linha 2, 5ª posição = 9 + (5-1) = 13.
-const BRAINHOT_JOIN_SLOT = 13;
+const BRAINROT_JOIN_SLOT = 13;
 
 const WINDOW_OPEN_TIMEOUT_MS = 6000;
 const WINDOW_CLOSE_TIMEOUT_MS = 5000;
@@ -51,27 +51,27 @@ function logPlayers(bot, label) {
   log(`[ENTITIES - ${label}] player-type entities loaded: ${playerEntities.length}`);
 }
 
-// Envia /brainhot, espera a janela abrir, faz dump dela, clica no slot do
+// Envia /brainrot, espera a janela abrir, faz dump dela, clica no slot do
 // ender pearl e faz dump do estado pós-clique. Não faz settle aqui — os
 // checkpoints de bot.players ficam a cargo do caller (main), pra poder medir
 // a tab list em vários momentos.
-async function joinBrainHot(bot) {
-  log('-> /brainhot');
-  bot.chat('/brainhot');
+async function joinBrainrot(bot) {
+  log('-> /brainrot');
+  bot.chat('/brainrot');
 
   const windowOpenedArgs = await waitForEvent(bot, 'windowOpen', WINDOW_OPEN_TIMEOUT_MS);
-  if (!windowOpenedArgs) return { success: false, reason: 'janela do /brainhot não abriu' };
+  if (!windowOpenedArgs) return { success: false, reason: 'janela do /brainrot não abriu' };
 
   const window = windowOpenedArgs[0];
   dumpWindow(window);
 
-  const slotItem = window.slots[BRAINHOT_JOIN_SLOT];
-  log(`[CHECK] slot ${BRAINHOT_JOIN_SLOT} contém: ${slotItem ? slotItem.name : '(vazio)'}`);
+  const slotItem = window.slots[BRAINROT_JOIN_SLOT];
+  log(`[CHECK] slot ${BRAINROT_JOIN_SLOT} contém: ${slotItem ? slotItem.name : '(vazio)'}`);
 
   dumpInventory(bot, 'antes do clique no slot do ender pearl');
 
-  log(`-> clickWindow(${BRAINHOT_JOIN_SLOT})`);
-  bot.clickWindow(BRAINHOT_JOIN_SLOT, 0, 0);
+  log(`-> clickWindow(${BRAINROT_JOIN_SLOT})`);
+  bot.clickWindow(BRAINROT_JOIN_SLOT, 0, 0);
 
   const closed = await waitForEvent(bot, 'windowClose', WINDOW_CLOSE_TIMEOUT_MS);
   log(`[STEP] windowClose: ${closed ? 'recebido' : 'TIMEOUT - janela não fechou'}`);
@@ -79,7 +79,7 @@ async function joinBrainHot(bot) {
   const spawned = await waitForEvent(bot, 'spawn', POST_CLICK_SPAWN_TIMEOUT_MS);
   log(`[STEP] spawn após clique: ${spawned ? 'recebido' : 'não recebeu novo spawn (pode ser normal)'}`);
 
-  dumpInventory(bot, 'depois de entrar no brainhot');
+  dumpInventory(bot, 'depois de entrar no brainrot');
   log(`[STATE] bot.game: ${JSON.stringify(bot.game)}`);
   const pos = bot.entity ? bot.entity.position : null;
   log(`[STATE] posição: ${pos ? `x=${pos.x.toFixed(1)} y=${pos.y.toFixed(1)} z=${pos.z.toFixed(1)}` : 'desconhecida'}`);
@@ -120,7 +120,7 @@ async function main() {
 
   log(`[STATE] bot.game após troca para RankUp: ${JSON.stringify(bot.game)}`);
 
-  const joinResult = await joinBrainHot(bot);
+  const joinResult = await joinBrainrot(bot);
   if (!joinResult.success) {
     log(`[FAIL] ${joinResult.reason}`);
     bot.quit();

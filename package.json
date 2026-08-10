@@ -4,7 +4,7 @@
   "description": "AFK Fishing Bot Farm for Minecraft",
   "main": "register.js",
   "scripts": {
-    "brainhot": "node brainhot.js",
+    "brainrot": "node brainrot.js",
     "register": "node register-all.js",
     "login": "node login-and-kit-v2.js",
     "farm": "node farm-all.js",
