@@ -45,7 +45,7 @@ function logPlayers(bot, label) {
   log(`[PLAYERS - ${label}] count=${names.length}`);
   names.forEach((name) => {
     const p = players[name];
-    log(`  ${name} uuid=${p.uuid} ping=${p.ping} entityId=${p.entity ? p.entity.id : 'none'}`);
+    log(`  ${name} uuid=${p.uuid} ping=${p.ping} gamemode=${p.gamemode} displayName=${JSON.stringify(p.displayName ? p.displayName.toString() : null)} entityId=${p.entity ? p.entity.id : 'none'}`);
   });
   const playerEntities = Object.values(bot.entities).filter((e) => e.type === 'player');
   log(`[ENTITIES - ${label}] player-type entities loaded: ${playerEntities.length}`);
@@ -103,7 +103,10 @@ async function main() {
   bot.on('message', (message) => log(`[MESSAGE] ${JSON.stringify(message.toString())}`));
   bot.on('windowOpen', (w) => log(`[EVENT windowOpen] id=${w.id} type=${w.type} title=${JSON.stringify(w.title)}`));
   bot.on('windowClose', (w) => log(`[EVENT windowClose] id=${w ? w.id : '?'}`));
-  bot.on('spawn', () => log('[EVENT spawn]'));
+  bot.on('spawn', () => {
+    const pos = bot.entity ? bot.entity.position : null;
+    log(`[EVENT spawn] dimension=${bot.game ? bot.game.dimension : 'unknown'} pos=${pos ? `x=${pos.x.toFixed(1)} y=${pos.y.toFixed(1)} z=${pos.z.toFixed(1)}` : 'unknown'}`);
+  });
   bot.on('health', () => log(`[EVENT health] health=${bot.health} food=${bot.food}`));
   bot.on('respawn', () => log('[EVENT respawn]'));
 
@@ -114,6 +117,8 @@ async function main() {
     bot.quit();
     process.exit(1);
   }
+
+  log(`[STATE] bot.game após troca para RankUp: ${JSON.stringify(bot.game)}`);
 
   const joinResult = await joinBrainHot(bot);
   if (!joinResult.success) {
