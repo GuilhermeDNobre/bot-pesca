@@ -41,12 +41,22 @@ async function attemptLogin(username, config, password) {
 
 // Loga e troca pro RankUp com retry infinito - nunca desiste, porque todas as
 // contas precisam ficar online. Falha por manutenção espera mais (60s) do que
-// falha transitória (8s) antes de tentar de novo.
+// falha transitória (8s) antes de tentar de novo. Exceções lançadas durante a
+// tentativa também causam retry (com delay transitório).
 async function loginUntilOnline(username, config, password) {
   let attempt = 0;
   for (;;) {
     attempt++;
-    const { bot, result } = await withLoginLock(() => attemptLogin(username, config, password));
+    let bot, result;
+    try {
+      ({ bot, result } = await withLoginLock(() => attemptLogin(username, config, password)));
+    } catch (err) {
+      console.log(`  [${username}] [FAIL] tentativa ${attempt}: ${err.message}`);
+      console.log(`  [${username}] [retry] tentando de novo em ${TRANSIENT_RETRY_DELAY_MS / 1000}s`);
+      await sleep(TRANSIENT_RETRY_DELAY_MS);
+      continue;
+    }
+
     if (result.success) return bot;
 
     bot.quit();
@@ -58,7 +68,8 @@ async function loginUntilOnline(username, config, password) {
 }
 
 // Confere o inventário a cada SWORD_WATCHDOG_INTERVAL_MS; assim que achar a Diamond
-// Sword, equipa, loga sucesso e para de checar.
+// Sword, equipa, loga sucesso e para de checar. Se o bot desconectar, limpa o interval
+// para evitar promise rejections periódicas contra uma conexão morta.
 function startSwordWatchdog(bot, username) {
   const interval = setInterval(async () => {
     const equipped = await equipDiamondSword(bot);
@@ -67,6 +78,10 @@ function startSwordWatchdog(bot, username) {
       clearInterval(interval);
     }
   }, SWORD_WATCHDOG_INTERVAL_MS);
+
+  bot.once('end', () => {
+    clearInterval(interval);
+  });
 }
 
 async function processAccount(username, config, password) {
