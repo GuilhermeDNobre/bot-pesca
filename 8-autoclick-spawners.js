@@ -108,8 +108,21 @@ async function processAccount(username, config, password) {
   const bot = await loginUntilOnline(username, config, password);
   console.log(`  [${username}] [ok] logado e no servidor RankUp`);
 
+  // Track disconnect via local flag (mineflayer never resets bot.player on disconnect, so we use a flag).
+  // Register both the disconnect flag and the reconnect hook immediately, so they're armed before
+  // any await that could yield to a disconnect — if the bot drops anywhere in the flow, reconnection
+  // is already wired and will fire once via bot.once('end').
+  let disconnected = false;
+  bot.once('end', () => {
+    disconnected = true;
+    console.log(`  [${username}] [warn] desconectou, reconectando...`);
+    processAccount(username, config, password).catch((err) => {
+      console.log(`  [${username}] [FATAL] ${err.message}`);
+    });
+  });
+
   // Check liveness before /home spawner
-  if (!bot.player) {
+  if (disconnected) {
     console.log(`  [${username}] [warn] desconectou antes de completar o setup, reconexão vai tratar disso`);
     return;
   }
@@ -119,7 +132,7 @@ async function processAccount(username, config, password) {
   await sleep(AFTER_HOME_SETTLE_MS);
 
   // Check liveness after /home settle wait
-  if (!bot.player) {
+  if (disconnected) {
     console.log(`  [${username}] [warn] desconectou antes de completar o setup, reconexão vai tratar disso`);
     return;
   }
@@ -133,7 +146,7 @@ async function processAccount(username, config, password) {
   }
 
   // Check liveness before /autoclick
-  if (!bot.player) {
+  if (disconnected) {
     console.log(`  [${username}] [warn] desconectou antes de completar o setup, reconexão vai tratar disso`);
     return;
   }
@@ -141,14 +154,6 @@ async function processAccount(username, config, password) {
   console.log(`  [${username}] -> /autoclick`);
   bot.chat('/autoclick');
   console.log(`  [${username}] [ok] autoclick ligado, conta permanece online`);
-
-  // Auto-reconnect: if this successfully-setup bot disconnects, reconnect automatically
-  bot.once('end', () => {
-    console.log(`  [${username}] [warn] desconectou, reconectando...`);
-    processAccount(username, config, password).catch((err) => {
-      console.log(`  [${username}] [FATAL] ${err.message}`);
-    });
-  });
 }
 
 async function main() {
