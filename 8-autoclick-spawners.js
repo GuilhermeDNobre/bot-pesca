@@ -23,9 +23,11 @@ const TRANSIENT_RETRY_DELAY_MS = 8000;
 const MAINTENANCE_RETRY_DELAY_MS = 60000;
 const STAGGER_MS = 3000; // paces initial TCP connects/console output, not a safety net
 
-function loadAccountpigUsernames() {
+// accountspig.json's own "password" is used instead of accounts.json's - these are a
+// separate set of Minecraft accounts with their own shared credential, same server.
+function loadAccountpigData() {
   const data = JSON.parse(fs.readFileSync(ACCOUNTPIG_FILE, 'utf8'));
-  return data.accounts;
+  return { usernames: data.accounts, password: data.password };
 }
 
 // Serializes only the fragile login/server-switch handshake so it's never attempted
@@ -157,9 +159,8 @@ async function processAccount(username, config, password) {
 }
 
 async function main() {
-  const data = loadAccounts();
-  const { server: config, password } = data;
-  const usernames = loadAccountpigUsernames();
+  const { server: config } = loadAccounts();
+  const { usernames, password } = loadAccountpigData();
 
   for (const username of usernames) {
     processAccount(username, config, password).catch((err) => {
