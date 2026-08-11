@@ -8,6 +8,14 @@ const { loadAccounts, sleep, connectBot, describeReason } = require('./common');
 const { loginAndSwitchServer } = require('./flow');
 const { equipDiamondSword } = require('./pig');
 
+// Blanket safety net: Node v24 terminates on unhandled rejection by default.
+// This catches rejections from async callbacks (e.g., sword watchdog's setInterval)
+// and pre-existing hazards like flow.js's unawaited bot.clickWindow, preventing
+// a single failed transaction from killing all connected bots.
+process.on('unhandledRejection', (err) => {
+  console.log(`[unhandledRejection] ${err && err.message ? err.message : err}`);
+});
+
 const ACCOUNTPIG_FILE = path.join(__dirname, 'accountspig.json');
 const AFTER_HOME_SETTLE_MS = 3000;
 const SWORD_WATCHDOG_INTERVAL_MS = 5 * 60 * 1000;
@@ -35,8 +43,14 @@ async function attemptLogin(username, config, password) {
   bot.on('kicked', (reason) => console.log(`  [${username}] [kicked] ${describeReason(reason)}`));
   bot.on('end', (reason) => console.log(`  [${username}] [end] ${describeReason(reason)}`));
 
-  const result = await loginAndSwitchServer(bot, password);
-  return { bot, result };
+  try {
+    const result = await loginAndSwitchServer(bot, password);
+    return { bot, result };
+  } catch (err) {
+    // Ensure bot is cleaned up even if loginAndSwitchServer throws
+    bot.quit();
+    throw err; // rethrow for loginUntilOnline to retry
+  }
 }
 
 // Loga e troca pro RankUp com retry infinito - nunca desiste, porque todas as
@@ -69,13 +83,19 @@ async function loginUntilOnline(username, config, password) {
 
 // Confere o inventário a cada SWORD_WATCHDOG_INTERVAL_MS; assim que achar a Diamond
 // Sword, equipa, loga sucesso e para de checar. Se o bot desconectar, limpa o interval
-// para evitar promise rejections periódicas contra uma conexão morta.
+// para evitar promise rejections periódicas contra uma conexão morta. Exceções durante
+// equip são capturadas para não matar o watchdog nem o processo.
 function startSwordWatchdog(bot, username) {
   const interval = setInterval(async () => {
-    const equipped = await equipDiamondSword(bot);
-    if (equipped) {
-      console.log(`  [${username}] [ok] espada encontrada e equipada`);
-      clearInterval(interval);
+    try {
+      const equipped = await equipDiamondSword(bot);
+      if (equipped) {
+        console.log(`  [${username}] [ok] espada encontrada e equipada`);
+        clearInterval(interval);
+      }
+    } catch (err) {
+      console.log(`  [${username}] [warn] erro ao tentar equipar espada: ${err.message}`);
+      // interval keeps polling on next cycle
     }
   }, SWORD_WATCHDOG_INTERVAL_MS);
 
@@ -88,9 +108,21 @@ async function processAccount(username, config, password) {
   const bot = await loginUntilOnline(username, config, password);
   console.log(`  [${username}] [ok] logado e no servidor RankUp`);
 
+  // Check liveness before /home spawner
+  if (!bot.player) {
+    console.log(`  [${username}] [warn] desconectou antes de completar o setup, reconexão vai tratar disso`);
+    return;
+  }
+
   console.log(`  [${username}] -> /home spawner`);
   bot.chat('/home spawner');
   await sleep(AFTER_HOME_SETTLE_MS);
+
+  // Check liveness after /home settle wait
+  if (!bot.player) {
+    console.log(`  [${username}] [warn] desconectou antes de completar o setup, reconexão vai tratar disso`);
+    return;
+  }
 
   const equipped = await equipDiamondSword(bot);
   if (equipped) {
@@ -100,9 +132,23 @@ async function processAccount(username, config, password) {
     startSwordWatchdog(bot, username);
   }
 
+  // Check liveness before /autoclick
+  if (!bot.player) {
+    console.log(`  [${username}] [warn] desconectou antes de completar o setup, reconexão vai tratar disso`);
+    return;
+  }
+
   console.log(`  [${username}] -> /autoclick`);
   bot.chat('/autoclick');
   console.log(`  [${username}] [ok] autoclick ligado, conta permanece online`);
+
+  // Auto-reconnect: if this successfully-setup bot disconnects, reconnect automatically
+  bot.once('end', () => {
+    console.log(`  [${username}] [warn] desconectou, reconectando...`);
+    processAccount(username, config, password).catch((err) => {
+      console.log(`  [${username}] [FATAL] ${err.message}`);
+    });
+  });
 }
 
 async function main() {
