@@ -4,7 +4,7 @@
 // conectadas indefinidamente depois disso - o processo não termina sozinho.
 const fs = require('fs');
 const path = require('path');
-const { loadAccounts, sleep, connectBot, describeReason } = require('./common');
+const { loadAccounts, sleep, connectBot, describeReason, waitForMessage } = require('./common');
 const { loginAndSwitchServer } = require('./flow');
 const { equipDiamondSword } = require('./pig');
 
@@ -22,6 +22,8 @@ const SWORD_WATCHDOG_INTERVAL_MS = 5 * 60 * 1000;
 const TRANSIENT_RETRY_DELAY_MS = 8000;
 const MAINTENANCE_RETRY_DELAY_MS = 60000;
 const STAGGER_MS = 3000; // paces initial TCP connects/console output, not a safety net
+const RUBIS_RESPONSE_WAIT_MS = 5000;
+const AUTOCLICK_VERIFY_DELAY_MS = 90 * 1000; // 1.5min
 
 // accountspig.json's own "password" is used instead of accounts.json's - these are a
 // separate set of Minecraft accounts with their own shared credential, same server.
@@ -156,6 +158,22 @@ async function processAccount(username, config, password) {
   console.log(`  [${username}] -> /autoclick`);
   bot.chat('/autoclick');
   console.log(`  [${username}] [ok] autoclick ligado, conta permanece online`);
+
+  bot.chat('/rubis');
+  const rubisBefore = await waitForMessage(bot, () => true, RUBIS_RESPONSE_WAIT_MS);
+
+  await sleep(AUTOCLICK_VERIFY_DELAY_MS);
+  if (disconnected) return;
+
+  bot.chat('/rubis');
+  const rubisAfter = await waitForMessage(bot, () => true, RUBIS_RESPONSE_WAIT_MS);
+
+  if (rubisBefore !== null && rubisBefore === rubisAfter) {
+    console.log(`  [${username}] [aviso] rubis não mudou em 1.5min, autoclick provavelmente não ativou - reenviando /autoclick`);
+    bot.chat('/autoclick');
+  } else {
+    console.log(`  [${username}] [ok] rubis mudou, autoclick confirmado ativo`);
+  }
 }
 
 async function main() {
