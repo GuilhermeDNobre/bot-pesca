@@ -10,7 +10,7 @@
     "farm": "node farm-all.js",
     "diagnose": "node diagnose.js",
     "plot": "node plot-jurapesca01.js",
-    "autoclick-spawners": "node 8-autoclick-spawners.js"
+    "autoclick": "node 8-autoclick-spawners.js"
   },
   "keywords": [
     "minecraft",

@@ -4,8 +4,8 @@ const { loadAccounts, sleep, connectBot, describeReason, waitForMessage } = requ
 const { loginAndSwitchServer } = require('./flow');
 const { equipDiamondSword, findNearestPig, attackPigUntilDead, computeHitLocation, sameHitLocation } = require('./pig');
 
-const USERNAME = 'JuraPesca01';
-const PASSWORD = '357159';
+const USERNAME = 'messigoat';
+const PASSWORD = '';
 const MAX_ATTEMPTS = 3; // transient disconnects/proxy hiccups get a couple of automatic retries
 const AFTER_KILL_DELAY_MS = 5000;
 const INITIAL_CHECK_DELAY_MS = 3000;
